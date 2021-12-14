@@ -31,7 +31,6 @@ export class Player {
   }
 
   public addCards(...cards: Card[]): void {
-    console.log(`Added ${cards.length} cards to ${this.name}`);
     for (const card of cards) this.hand.set(card.id, card);
   }
 

@@ -1,6 +1,4 @@
-import Collection from '@discordjs/collection';
 import { EventEmitter } from 'events';
-import { CardID, Rank } from '../../typings/index.js';
 import { Card } from './Card.js';
 import { Deck } from './Deck.js';
 import { Player } from './Player.js';
@@ -8,33 +6,31 @@ import { Player } from './Player.js';
 export class WarClient extends EventEmitter {
   public readonly deck: Deck;
   public readonly players: Player[];
+  public readonly duelAmount: number;
   public readonly verbose?: boolean;
 
   public nextPlayer: Player | null;
-  public turns: number;
-  public rankToPlay: Rank;
-  public pile: Collection<CardID, Card>;
+  public rounds: number;
   public startedAt: number;
-  public playerIndex: number;
   public dealt: boolean;
   public winner: Player | null;
 
-  constructor(deck: Deck, verbose?: boolean) {
+  constructor(deck: Deck, options: { duelAmount?: number, verbose?: boolean }) {
     super();
     this.deck = deck;
     this.players = [];
     this.startedAt = 0;
-    this.rankToPlay = 'A';
-    this.pile = new Collection();
-    this.turns = 0;
-    this.playerIndex = 0;
+    this.rounds = 0;
     this.dealt = false;
     this.nextPlayer = null;
     this.winner = null;
-    this.verbose = verbose;
+    this.duelAmount = options.duelAmount ?? 3;
+    this.verbose = options.verbose;
 
     this.on('go', async (playerOne: Player, playerTwo: Player) => {
-      this.turns++;
+      if (!this.dealt) throw new Error('Cards have not been dealt.');
+
+      this.rounds++;
 
       this.play(playerOne, playerTwo);
     });
@@ -44,29 +40,27 @@ export class WarClient extends EventEmitter {
     return Date.now() - this.startedAt;
   }
 
-  private play(playerOne: Player, playerTwo: Player, ...duelCards: Card[]): 0 | 1 | 2 {
+  private play(playerOne: Player, playerTwo: Player, ...duelCards: Card[]): 0 | 1 | 2 | void {
     const playerOneCard = playerOne.cardToPlay;
     const playerTwoCard = playerTwo.cardToPlay;
 
     playerOne.removeCards(playerOneCard.id);
     playerTwo.removeCards(playerTwoCard.id);
 
-    if (this.verbose) console.log(`${playerOneCard.rank} vs ${playerTwoCard.rank}`);
+    const winner = this.checkWinner(playerOne, playerTwo);
+    if (winner) return console.log(`${winner.name} won on play after ${this.rounds} rounds!`);
+
+    if (this.verbose) console.log(`${playerOneCard.id} \u001b[32mvs\u001b[0m ${playerTwoCard.id}`);
 
     if (playerOneCard.rankValue > playerTwoCard.rankValue) {
       const cards = [playerOneCard, playerTwoCard];
-      cards.concat(...duelCards);
+      cards.push(...duelCards);
       playerOne.addCards(...cards);
 
       if (this.verbose) {
-        console.log(`${playerOne.name} wins with ${playerOneCard.id} against ${playerTwo.name} with ${playerTwoCard.id}`);
+        console.log(`${playerOne.name} wins ${duelCards.length ? 'duel' : 'play'} with ${playerOneCard.id} against ${playerTwo.name} with ${playerTwoCard.id}`);
         console.log(`${playerOne.name} has ${playerOne.hand.size} cards`);
         console.log(`${playerTwo.name} has ${playerTwo.hand.size} cards`);
-      }
-
-      if (playerOne.hand.size === 52) {
-        console.log(`${playerOne.name} won!`);
-        this.winner = playerOne;
       }
 
       return 1;
@@ -74,42 +68,50 @@ export class WarClient extends EventEmitter {
 
     if (playerOneCard.rankValue < playerTwoCard.rankValue) {
       const cards = [playerOneCard, playerTwoCard];
-      cards.concat(...duelCards);
-      playerOne.addCards(...cards);
+      cards.push(...duelCards);
+      playerTwo.addCards(...cards);
 
       if (this.verbose) {
-        console.log(`${playerTwo.name} wins with ${playerTwoCard.id} against ${playerOne.name} with ${playerOneCard.id}`);
-        console.log(`${playerOne.name} has ${playerOne.hand.size} cards`);
-        console.log(`${playerTwo.name} has ${playerTwo.hand.size} cards`);
-      }
-
-      if (playerTwo.hand.size === 52) {
-        console.log(`${playerTwo.name} won!`);
-        this.winner = playerTwo;
+        console.log(`${playerTwo.name} wins ${duelCards.length ? 'duel' : 'play'} with ${playerTwoCard.id} against ${playerOne.name} with ${playerOneCard.id}`);
+        console.log(`${playerOne.name} now has ${playerOne.hand.size} cards`);
+        console.log(`${playerTwo.name} now has ${playerTwo.hand.size} cards`);
       }
 
       return 2;
     }
 
-    this.duel(playerOne, playerTwo);
+    this.duel(playerOne, playerTwo, playerOneCard, playerTwoCard, ...duelCards);
 
     return 0;
   }
 
-  private duel(playerOne: Player, playerTwo: Player): void {
-    const playerOneCards = playerOne.hand.first(3);
-    const playerTwoCards = playerTwo.hand.first(3);
+  private checkWinner(playerOne: Player, playerTwo: Player): Player | null {
+    switch (0) {
+      case playerOne.hand.size:
+        return this.winner = playerOne;
+
+      case playerTwo.hand.size:
+        return this.winner = playerTwo;
+
+      default:
+        return null;
+    }
+  }
+
+  private duel(playerOne: Player, playerTwo: Player, ...originalCards: Card[]): void {
+
+    const playerOneCards = playerOne.hand.first(playerOne.hand.size > this.duelAmount ? this.duelAmount : (playerOne.hand.size - 1 ? playerOne.hand.size - 1 : 1));
+    const playerTwoCards = playerTwo.hand.first(playerTwo.hand.size > this.duelAmount ? this.duelAmount : (playerTwo.hand.size - 1 ? playerTwo.hand.size - 1 : 1));
 
     playerOne.removeCards(...playerOneCards.map(c => c.id));
     playerTwo.removeCards(...playerTwoCards.map(c => c.id));
 
-    const cards = playerTwoCards.concat(playerTwoCards);
-
-    if (!this.play(playerOne, playerTwo, ...cards)) this.duel(playerOne, playerTwo);
+    const cards = playerOneCards.concat(playerTwoCards).concat(originalCards);
+    if (!this.play(playerOne, playerTwo, ...cards) && !this.winner) this.duel(playerOne, playerTwo, ...cards);
   }
 
-  public setPlayers(playersOne: Player, playerTwo: Player) {
-    this.players.push(playersOne);
+  public setPlayers(playerOne: Player, playerTwo: Player) {
+    this.players.push(playerOne);
     this.players.push(playerTwo);
   }
 
@@ -126,6 +128,9 @@ export class WarClient extends EventEmitter {
   }
 
   public finish() {
-    while (!this.winner) this.emit('go', this.players[0], this.players[1]);
+    while (true) {
+      if (this.winner) break;
+      this.emit('go', this.players[0], this.players[1]);
+    }
   }
 }
