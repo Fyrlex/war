@@ -1,33 +1,22 @@
 import { CardID } from '../../typings/index.js';
 import { Card } from './Card.js';
-import { WarClient } from './WarClient.js';
 import Collection from '@discordjs/collection';
 
 export class Player {
-  public readonly client: WarClient;
   public readonly name: string;
 
-  public hand: Collection<CardID, Card>;
-  public first: boolean;
-  public peanutButter: boolean;
-  public played: CardID[] | null;
+  public hand = new Collection<CardID, Card>();
 
-  constructor(client: WarClient, name: string) {
-    this.client = client;
+  constructor(name: string) {
     this.name = name;
-
-    this.hand = new Collection();
-    this.first = false;
-    this.peanutButter = false;
-    this.played = null;
   }
 
   get cardCount(): number {
     return this.hand.size;
   }
 
-  get cardToPlay(): Card {
-    return this.hand.first()!;
+  get cardToPlay(): Card | undefined {
+    return this.hand.first();
   }
 
   public addCards(...cards: Card[]): void {
