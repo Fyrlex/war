@@ -1,4 +1,4 @@
-import { Player } from 'lib/structures/Player.js';
+import { Player } from '../lib/structures/Player.js';
 
 export type CardID = `${Rank}-${Suit}`;
 

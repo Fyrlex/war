@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "War Card Game",
   "main": "build/index.js",
-  "typings": "build/index.d.ts",
+  "types": "build/index.d.ts",
   "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -25,6 +25,7 @@
     "@discordjs/collection": "^0.3.2",
     "better-random.js": "^1.0.3",
     "better-sqlite3": "^7.4.5",
+    "embed-table": "^2.3.0",
     "log4js": "^6.3.0"
   },
   "devDependencies": {
