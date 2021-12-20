@@ -1,5 +1,5 @@
 {
-  "name": "@fyrlex/war",
+  "name": "war.js",
   "version": "1.0.0",
   "description": "War Card Game",
   "main": "build/index.js",
