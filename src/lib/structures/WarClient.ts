@@ -49,7 +49,7 @@ export class WarClient {
 			duration: this.duration,
 			duels: this.duelCount,
 			rounds: this.roundCount,
-			winner: this.winner
+			winner: this.winner,
 		};
 	}
 
