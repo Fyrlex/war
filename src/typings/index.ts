@@ -3,19 +3,19 @@ import { Player } from '../lib/structures/Player.js';
 export type CardID = `${Rank}-${Suit}`;
 
 export interface WarClientOptions {
-  database?: boolean,
-  duelAmount?: 1 | 2 | 3,
-  timeout?: number,
-  storeTimeouts?: boolean,
-  logger?: boolean
+	database?: boolean;
+	duelAmount?: 1 | 2 | 3;
+	timeout?: number;
+	storeTimeouts?: boolean;
+	logger?: boolean;
 }
 
-export type Game = {
-  players: [Player, Player],
-  duration: number,
-  duels: number,
-  rounds: number,
-  winner: Player | null | 'none'
+export interface Game {
+	players: [Player, Player];
+	duration: number;
+	duels: number;
+	rounds: number;
+	winner: Player | null | 'none';
 }
 
 export const ranks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'] as const;

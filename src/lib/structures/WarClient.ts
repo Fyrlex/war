@@ -1,244 +1,252 @@
 import db from 'better-sqlite3';
-import log4js from 'log4js';
 import { Card } from './Card.js';
 import { Deck } from './Deck.js';
 import { Player } from './Player.js';
 import { Game, WarClientOptions } from '../../typings/index.js';
 
-log4js.configure({
-  appenders: { war: { type: 'file', filename: './data/game.log' } },
-  categories: { default: { appenders: ['war'], level: 'all' } },
-});
-
 export class WarClient {
-  private readonly _storeTimeouts: boolean;
-  private readonly _logger?: log4js.Logger;
-  private readonly _db?: db.Database;
+	private readonly storeTimeouts: boolean;
+	private readonly db?: db.Database;
 
-  private _deck: Deck;
-  private _duelCount: number;
-  private _startedAt: number;
-  private _roundCount: number;
+	private deck: Deck;
+	private duelCount: number;
+	private startedAt: number;
+	private roundCount: number;
 
-  public readonly players: [Player, Player];
-  public readonly duelAmount: 1 | 2 | 3;
-  public readonly timeout: number;
+	public readonly players: [Player, Player];
+	public readonly duelAmount: 1 | 2 | 3;
+	public readonly timeout: number;
 
-  public winner: Player | null | 'none';
+	public winner: Player | null | 'none';
 
-  constructor(deck: Deck, players: [Player, Player], options: WarClientOptions) {
-    if (options.database) this._db = new db('./data/data.db');
-    if (options.logger) this._logger = log4js.getLogger('war');
-    this._storeTimeouts = options.storeTimeouts ?? false;
+	constructor(deck: Deck, players: [Player, Player], options: WarClientOptions) {
+		if (options.database) this.db = new db('./data/data.db');
+		this.storeTimeouts = options.storeTimeouts ?? false;
 
-    this._deck = deck;
-    this._startedAt = 0;
-    this._roundCount = 0;
-    this._duelCount = 0;
+		this.deck = deck;
+		this.startedAt = 0;
+		this.roundCount = 0;
+		this.duelCount = 0;
 
-    this.players = players;
-    this.duelAmount = options.duelAmount ?? 3;
-    this.timeout = options.timeout ?? 2000;
+		this.players = players;
+		this.duelAmount = options.duelAmount ?? 3;
+		this.timeout = options.timeout ?? 2000;
 
-    this.winner = null;
-  }
+		this.winner = null;
+	}
 
-  get duration(): number {
-    return Date.now() - this._startedAt;
-  }
+	get duration(): number {
+		return Date.now() - this.startedAt;
+	}
 
-  get duels(): number {
-    return this._duelCount;
-  }
+	get duels(): number {
+		return this.duelCount;
+	}
 
-  get game(): Game {
-    return {
-      players: this.players,
-      duration: this.duration,
-      duels: this._duelCount,
-      rounds: this._roundCount,
-      winner: this.winner
-    };
-  }
+	get game(): Game {
+		return {
+			players: this.players,
+			duration: this.duration,
+			duels: this.duelCount,
+			rounds: this.roundCount,
+			winner: this.winner
+		};
+	}
 
-  get overTime(): boolean {
-    return this.duration > this.timeout;
-  }
+	get overTime(): boolean {
+		return this.duration > this.timeout;
+	}
 
-  get rounds(): number {
-    return this._roundCount;
-  }
+	get rounds(): number {
+		return this.roundCount;
+	}
 
-  private compareRanks(cardOne: Card, cardTwo: Card): -1 | 0 | 1 {
-    if (cardOne.rankValue > cardTwo.rankValue) return 1;
-    if (cardOne.rankValue < cardTwo.rankValue) return -1;
-    else return 0;
-  }
+	private compareRanks(cardOne: Card, cardTwo: Card): -1 | 0 | 1 {
+		if (cardOne.rankValue > cardTwo.rankValue) {
+			return 1;
+		}
 
-  private play(playerOne: Player, playerTwo: Player, ...duelCards: Card[]): void {
-    this._roundCount++;
+		if (cardOne.rankValue < cardTwo.rankValue) {
+			return -1;
+		}
 
-    const playerOneCard = playerOne.cardToPlay;
-    const playerTwoCard = playerTwo.cardToPlay;
+		return 0;
+	}
 
-    if (!playerOneCard) {
-      const winner = this.checkWinner(playerOne, true)!;
-      this.logGame();
-      if (this._logger) this._logger.info(`Game ended in ${this.duration / 1000}s! ${winner.name} won after ${this._roundCount.toLocaleString('en')} rounds and ${this._duelCount.toLocaleString('en')} duels!`);
+	private play(playerOne: Player, playerTwo: Player, ...duelCards: Card[]): void {
+		this.roundCount++;
 
-      return;
-    }
+		const playerOneCard = playerOne.cardToPlay;
+		const playerTwoCard = playerTwo.cardToPlay;
 
-    if (!playerTwoCard) {
-      const winner = this.checkWinner(playerTwo, true)!;
-      this.logGame();
-      if (this._logger) this._logger.info(`Game ended in ${this.duration / 1000}s! ${winner.name} won after ${this._roundCount.toLocaleString('en')} rounds and ${this._duelCount.toLocaleString('en')} duels!`);
+		if (!playerOneCard) {
+			const winner = this.checkWinner(playerOne, true)!;
 
-      return;
-    }
+			this.logGame();
 
-    playerOne.removeCards(playerOneCard.id);
-    playerTwo.removeCards(playerTwoCard.id);
+			console.log(`Game ended in ${this.duration / 1000}s! ${winner.name} won after ${this.roundCount.toLocaleString('en')} rounds and ${this.duelCount.toLocaleString('en')} duels!`);
 
-    if (this._logger) this._logger.info(`${!this.compareRanks(playerOneCard, playerTwoCard) ? 'DUEL ' : ''}${playerOneCard.id} vs ${playerTwoCard.id} - Gametime: ${this.duration / 1000}s`);
+			return;
+		}
 
-    switch (this.compareRanks(playerOneCard, playerTwoCard)) {
-      case 1: {
-        const cards = [playerOneCard, playerTwoCard];
-        cards.push(...duelCards);
-        playerOne.addCards(...cards);
+		if (!playerTwoCard) {
+			const winner = this.checkWinner(playerTwo, true)!;
 
-        if (this._logger) {
-          this._logger.info(`${playerOne.name} wins ${duelCards.length ? 'duel' : 'play'} #${this.rounds} with ${playerOneCard.id} against ${playerTwo.name} with ${playerTwoCard.id} `);
-          this._logger.info(`${playerOne.name} has ${playerOne.cardCount.toLocaleString('en')} cards`);
-          this._logger.info(`${playerTwo.name} has ${playerTwo.cardCount.toLocaleString('en')} cards`);
-          this._logger.info('');
-        }
+			this.logGame();
 
-        const winner = this.checkWinner(playerOne);
-        if (winner) {
-          this.logGame();
-          if (this._logger) this._logger.info(`Game ended in ${this.duration / 1000}s! ${winner.name} won after ${this._roundCount.toLocaleString('en')} rounds and ${this._duelCount.toLocaleString('en')} duels!`);
+			console.log(`Game ended in ${this.duration / 1000}s! ${winner.name} won after ${this.roundCount.toLocaleString('en')} rounds and ${this.duelCount.toLocaleString('en')} duels!`);
 
-          return;
-        }
+			return;
+		}
 
-        break;
-      }
+		playerOne.removeCards(playerOneCard.id);
+		playerTwo.removeCards(playerTwoCard.id);
 
-      case -1: {
-        const cards = [playerOneCard, playerTwoCard];
-        cards.push(...duelCards);
-        playerTwo.addCards(...cards);
+		console.log(`${!this.compareRanks(playerOneCard, playerTwoCard) ? 'DUEL ' : ''}${playerOneCard.id} vs ${playerTwoCard.id} - Gametime: ${this.duration / 1000}s`);
 
-        if (this._logger) {
-          this._logger.info(`${playerTwo.name} wins ${duelCards.length ? 'duel' : 'play'} #${this.rounds} with ${playerTwoCard.id} against ${playerOne.name} with ${playerOneCard.id} `);
-          this._logger.info(`${playerOne.name} has ${playerOne.cardCount.toLocaleString('en')} cards`);
-          this._logger.info(`${playerTwo.name} has ${playerTwo.cardCount.toLocaleString('en')} cards`);
-          this._logger.info('');
-        }
-        const winner = this.checkWinner(playerOne);
-        if (winner) {
-          this.logGame();
-          if (this._logger) this._logger.info(`Game ended in ${this.duration / 1000}s! ${winner.name} won after ${this._roundCount.toLocaleString('en')} rounds and ${this._duelCount.toLocaleString('en')} duels!`);
+		switch (this.compareRanks(playerOneCard, playerTwoCard)) {
+			case 1: {
+				const cards = [playerOneCard, playerTwoCard];
+				cards.push(...duelCards);
+				playerOne.addCards(...cards);
 
-          return;
-        }
+				console.log(`${playerOne.name} wins ${duelCards.length ? 'duel' : 'play'} #${this.rounds} with ${playerOneCard.id} against ${playerTwo.name} with ${playerTwoCard.id} `);
+				console.log(`${playerOne.name} has ${playerOne.cardCount.toLocaleString('en')} cards`);
+				console.log(`${playerTwo.name} has ${playerTwo.cardCount.toLocaleString('en')} cards`);
+				console.log('');
 
-        break;
-      }
+				const winner = this.checkWinner(playerOne);
+				if (winner) {
+					this.logGame();
 
-      case 0: {
-        this._duelCount++;
+					console.log(`Game ended in ${this.duration / 1000}s! ${winner.name} won after ${this.roundCount.toLocaleString('en')} rounds and ${this.duelCount.toLocaleString('en')} duels!`);
 
-        const playerOneCards = playerOne.hand.first((playerOne.cardCount > this.duelAmount) ? this.duelAmount : (playerOne.cardCount - 1 ? playerOne.cardCount - 1 : 1));
-        const playerTwoCards = playerTwo.hand.first((playerTwo.cardCount > this.duelAmount) ? this.duelAmount : (playerTwo.cardCount - 1 ? playerTwo.cardCount - 1 : 1));
+					return;
+				}
 
-        switch (0) {
-          case playerOne.cardCount: {
-            const winner = this.checkWinner(playerOne, true)!;
-            this.logGame();
-            if (this._logger) this._logger.info(`Game ended in ${this.duration / 1000}s! ${winner.name} won after ${this._roundCount.toLocaleString('en')} rounds and ${this._duelCount.toLocaleString('en')} duels!`);
+				break;
+			}
 
-            return;
-          }
+			case -1: {
+				const cards = [playerOneCard, playerTwoCard];
+				cards.push(...duelCards);
+				playerTwo.addCards(...cards);
 
-          case playerTwo.cardCount: {
-            const winner = this.checkWinner(playerTwo, true)!;
-            this.logGame();
-            if (this._logger) this._logger.info(`Game ended in ${this.duration / 1000}s! ${winner.name} won after ${this._roundCount.toLocaleString('en')} rounds and ${this._duelCount.toLocaleString('en')} duels!`);
+				console.log(`${playerTwo.name} wins ${duelCards.length ? 'duel' : 'play'} #${this.rounds} with ${playerTwoCard.id} against ${playerOne.name} with ${playerOneCard.id} `);
+				console.log(`${playerOne.name} has ${playerOne.cardCount.toLocaleString('en')} cards`);
+				console.log(`${playerTwo.name} has ${playerTwo.cardCount.toLocaleString('en')} cards`);
+				console.log('');
 
-            return;
-          }
-        }
+				const winner = this.checkWinner(playerOne);
 
-        if (playerOne.cardCount > 1) playerOne.removeCards(...playerOneCards.map(c => c.id));
-        if (playerTwo.cardCount > 1) playerTwo.removeCards(...playerTwoCards.map(c => c.id));
+				if (winner) {
+					this.logGame();
 
-        const cards = playerOneCards.concat(playerTwoCards).concat(duelCards).concat(playerOneCard, playerTwoCard);
-        this.play(playerOne, playerTwo, ...cards);
+					console.log(`Game ended in ${this.duration / 1000}s! ${winner.name} won after ${this.roundCount.toLocaleString('en')} rounds and ${this.duelCount.toLocaleString('en')} duels!`);
 
-        break;
-      }
-    }
-  }
+					return;
+				}
 
-  private checkWinner(player: Player, zero?: boolean): Player | null {
-    switch (zero ? 0 : 52) {
-      case player.cardCount:
-        return this.winner = zero ? this.players.find(p => p.name !== player.name)! : player;
+				break;
+			}
 
-      default:
-        return null;
-    }
-  }
+			case 0: {
+				this.duelCount++;
 
-  private logGame(timeout?: boolean): void {
-    if (this._db) this._db.prepare('INSERT INTO war (player_one, player_two, winner, duration, duels, rounds, timed_out) VALUES(?, ?, ?, ?, ?, ?, ?)').run(this.players[0].name, this.players[1].name, (this.winner === 'none' ? this.winner : this.players.indexOf(this.winner!)), this.duration, this._duelCount, this._roundCount, timeout ? 1 : 0);
-  }
+				const playerOneCards = playerOne.hand.first((playerOne.cardCount > this.duelAmount) ? this.duelAmount : (playerOne.cardCount - 1 ? playerOne.cardCount - 1 : 1));
+				const playerTwoCards = playerTwo.hand.first((playerTwo.cardCount > this.duelAmount) ? this.duelAmount : (playerTwo.cardCount - 1 ? playerTwo.cardCount - 1 : 1));
 
-  public clearDB(): void {
-    if (this._db) {
-      this._db.prepare('DELETE FROM war').run();
-      this._db.prepare('UPDATE sqlite_sequence SET seq=? WHERE name=?').run('0', 'war');
-    }
-  }
+				switch (0) {
+					case playerOne.cardCount: {
+						const winner = this.checkWinner(playerOne, true)!;
+						this.logGame();
 
-  public reset(): void {
-    this._roundCount = 0;
-    this._duelCount = 0;
-    this.winner = null;
-    this._startedAt = 0;
-    this._deck = new Deck({ shuffle: true });
-    for (const player of this.players) player.clearCards();
-  }
+						console.log(`Game ended in ${this.duration / 1000}s! ${winner.name} won after ${this.roundCount.toLocaleString('en')} rounds and ${this.duelCount.toLocaleString('en')} duels!`);
 
-  public run(): void {
-    this.deal();
+						return;
+					}
 
-    this._startedAt = Date.now();
-    if (this._logger) this._logger.info(`Game starting... Timeout: ${this.timeout / 1000}s`);
+					case playerTwo.cardCount: {
+						const winner = this.checkWinner(playerTwo, true)!;
+						this.logGame();
 
-    while (!this.winner) {
-      this.play(this.players[0], this.players[1]);
+						console.log(`Game ended in ${this.duration / 1000}s! ${winner.name} won after ${this.roundCount.toLocaleString('en')} rounds and ${this.duelCount.toLocaleString('en')} duels!`);
 
-      if (this.overTime) {
-        this.winner = 'none';
-        if (this._storeTimeouts) this.logGame(true);
-        if (this._logger) this._logger.error('Game taking too long... Try increasing timeout');
-      }
-    }
+						return;
+					}
+				}
 
-    this.reset();
-  }
+				if (playerOne.cardCount > 1) playerOne.removeCards(...playerOneCards.map(c => c.id));
+				if (playerTwo.cardCount > 1) playerTwo.removeCards(...playerTwoCards.map(c => c.id));
 
-  public deal(): void {
-    let playerIndex = 0;
+				const cards = playerOneCards.concat(playerTwoCards).concat(duelCards).concat(playerOneCard, playerTwoCard);
+				this.play(playerOne, playerTwo, ...cards);
 
-    for (const [, card] of this._deck.cards) {
-      if (playerIndex > this.players.length - 1) playerIndex = 0;
-      const player = this.players[playerIndex++]!;
-      player.addCards(card);
-    }
-  }
+				break;
+			}
+		}
+	}
+
+	private checkWinner(player: Player, zero?: boolean): Player | null {
+		switch (zero ? 0 : 52) {
+			case player.cardCount:
+				return this.winner = zero ? this.players.find(p => p.name !== player.name)! : player;
+
+			default:
+				return null;
+		}
+	}
+
+	private logGame(timeout?: boolean): void {
+		if (this.db) this.db.prepare('INSERT INTO war (player_one, player_two, winner, duration, duels, rounds, timed_out) VALUES(?, ?, ?, ?, ?, ?, ?)').run(this.players[0].name, this.players[1].name, (this.winner === 'none' ? this.winner : this.players.indexOf(this.winner!)), this.duration, this.duelCount, this.roundCount, timeout ? 1 : 0);
+	}
+
+	public clearDB(): void {
+		if (this.db) {
+			this.db.prepare('DELETE FROM war').run();
+			this.db.prepare('UPDATE sqlite_sequence SET seq=? WHERE name=?').run('0', 'war');
+		}
+	}
+
+	public reset(): void {
+		this.roundCount = 0;
+		this.duelCount = 0;
+		this.winner = null;
+		this.startedAt = 0;
+		this.deck = new Deck({ shuffle: true });
+		for (const player of this.players) player.clearCards();
+	}
+
+	public run(): void {
+		this.deal();
+
+		this.startedAt = Date.now();
+		console.log(`Game starting... Timeout: ${this.timeout / 1000}s`);
+
+		while (!this.winner) {
+			this.play(this.players[0], this.players[1]);
+
+			if (this.overTime) {
+				this.winner = 'none';
+
+				if (this.storeTimeouts) {
+					this.logGame(true);
+				}
+
+				console.error('Game taking too long... Try increasing timeout');
+			}
+		}
+
+		this.reset();
+	}
+
+	public deal(): void {
+		let playerIndex = 0;
+
+		for (const [, card] of this.deck.cards) {
+			if (playerIndex > this.players.length - 1) playerIndex = 0;
+			const player = this.players[playerIndex++]!;
+			player.addCards(card);
+		}
+	}
 }
